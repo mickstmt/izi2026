@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Izistore 2026 - Dashboard de Proyecciones</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .kpi-card { transition: transform 0.2s; }
+        .kpi-card:hover { transform: translateY(-5px); }
+        .sidebar {
+            background: #212529;
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            overflow-y: auto;
+        }
+        .main-content {
+            margin-left: 16.66667%; /* Compensa el ancho del sidebar (col-md-2) */
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                position: relative;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
+        .nav-tabs .nav-link {
+            color: #495057;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            color: #212529;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar / Controls -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
+                <h4 class="mb-4">Izistore 2026</h4>
+
+                <!-- Selector de Año Base -->
+                <div class="mb-4">
+                    <label class="form-label">Año Base para Proyección</label>
+                    <select class="form-select" id="yearSelect" onchange="updateProj()">
+                        <option value="2025" selected>2025 (Último año)</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="all">Promedio de todos</option>
+                    </select>
+                    <small class="text-secondary">Selecciona qué año usar como referencia para la proyección 2026</small>
+                </div>
+
+                <hr>
+
+                <div class="mb-4">
+                    <label class="form-label">Crecimiento Ventas (%)</label>
+                    <input type="range" class="form-range" id="growthRange" min="-50" max="200" value="{{ growth }}" oninput="updateProj()">
+                    <span id="growthVal" class="badge bg-primary">{{ growth }}%</span>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">ROAS Target META</label>
+                    <input type="range" class="form-range" id="roasMetaRange" min="1" max="50" step="0.5" value="{{ roas_meta }}" oninput="updateProj()">
+                    <span id="roasMetaVal" class="badge bg-success">{{ roas_meta }}x</span>
+                    <small class="text-secondary d-block mt-1">Retorno esperado por S/ invertido en META</small>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">ROAS Target TIKTOK</label>
+                    <input type="range" class="form-range" id="roasTiktokRange" min="1" max="50" step="0.5" value="{{ roas_tiktok }}" oninput="updateProj()">
+                    <span id="roasTiktokVal" class="badge bg-info">{{ roas_tiktok }}x</span>
+                    <small class="text-secondary d-block mt-1">Retorno esperado por S/ invertido en TIKTOK</small>
+                </div>
+                <hr>
+                <p class="small text-secondary">Basado en Master_Excel_2025.xlsx</p>
+                <div class="d-grid gap-2 mt-auto">
+                    <button class="btn btn-outline-light btn-sm" onclick="location.reload()">Refrescar Datos</button>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Resumen Ejecutivo Proyectado 2026</h1>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs mb-4" id="dashboardTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="main-tab" data-bs-toggle="tab" data-bs-target="#main-content" type="button" role="tab" aria-controls="main-content" aria-selected="true">
+                            Dashboard Principal
+                        </button>
+                    </li>
+                    {% if ads_metrics %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="ads-tab" data-bs-toggle="tab" data-bs-target="#ads-content" type="button" role="tab" aria-controls="ads-content" aria-selected="false">
+                            Análisis de Publicidad
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content" id="dashboardTabContent">
+
+                    <!-- TAB 1: DASHBOARD PRINCIPAL -->
+                    <div class="tab-pane fade show active" id="main-content" role="tabpanel" aria-labelledby="main-tab">
+
+                        <!-- KPIs -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card kpi-card bg-primary text-white p-3">
+                                    <div class="small">Venta Anual Proyectada</div>
+                                    <h3 id="totalSales">S/ {{ "{:,.2f}".format(summary.total_sales) }}</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card bg-success text-white p-3">
+                                    <div class="small">Utilidad Neta Estimada</div>
+                                    <h3 id="totalProfit">S/ {{ "{:,.2f}".format(summary.total_profit) }}</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card bg-warning text-dark p-3">
+                                    <div class="small">Costo Mercadería (COGS)</div>
+                                    <h3 id="totalCogs">S/ {{ "{:,.2f}".format(summary.total_cogs) }}</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card bg-info text-white p-3">
+                                    <div class="small">Inversión Ads Total</div>
+                                    <h3 id="totalAds">S/ {{ "{:,.2f}".format(summary.total_ads) }}</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts -->
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div id="yearlyChart"></div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div id="compChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="categoryChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="historicalMonthlyChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="trendChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3">
+                                    <div id="topProductsChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Comparación Año a Año -->
+                        {% if yoy_comparison_chart %}
+                        <div class="row mt-4">
+                            <div class="col-lg-12">
+                                <h4 class="mb-3">📊 Análisis de Crecimiento Histórico</h4>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div id="yoyComparisonChart"></div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div id="yoyDetailedChart"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    </div>
+
+                    <!-- TAB 2: ANÁLISIS DE PUBLICIDAD -->
+                    {% if ads_metrics %}
+                    <div class="tab-pane fade" id="ads-content" role="tabpanel" aria-labelledby="ads-tab">
+
+                        <h3 class="mb-4">Análisis de Publicidad 2025</h3>
+
+                        <!-- KPIs de Publicidad -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card kpi-card p-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                                    <div class="small">Gasto Total en Ads</div>
+                                    <h4>S/ {{ "{:,.2f}".format(ads_metrics.total_gasto) }}</h4>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card p-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                                    <div class="small">Ventas de Publicidad</div>
+                                    <h4>S/ {{ "{:,.2f}".format(ads_metrics.total_venta) }}</h4>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card p-3" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+                                    <div class="small">ROAS Promedio</div>
+                                    <h4>{{ "{:.2f}".format(ads_metrics.roas_promedio) }}x</h4>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card kpi-card p-3" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
+                                    <div class="small">Total Registros</div>
+                                    <h4>{{ ads_metrics.num_registros }}</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPIs de Atribución -->
+                        {% if ads_attribution %}
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="card p-4 text-center">
+                                    <div class="small text-muted mb-2">Ventas de Publicidad</div>
+                                    <h3 class="text-primary mb-2">{{ "{:.1f}".format(ads_attribution.pct_ads) }}%</h3>
+                                    <h5 class="text-muted">S/ {{ "{:,.0f}".format(ads_attribution.ventas_ads) }}</h5>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card p-4 text-center">
+                                    <div class="small text-muted mb-2">Ventas Orgánicas</div>
+                                    <h3 class="text-success mb-2">{{ "{:.1f}".format(ads_attribution.pct_organicas) }}%</h3>
+                                    <h5 class="text-muted">S/ {{ "{:,.0f}".format(ads_attribution.ventas_organicas) }}</h5>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card p-4 text-center">
+                                    <div class="small text-muted mb-2">Ventas Totales</div>
+                                    <h3 class="text-dark mb-2">100%</h3>
+                                    <h5 class="text-muted">S/ {{ "{:,.0f}".format(ads_attribution.ventas_totales) }}</h5>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Gráficos de Publicidad -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="adsSpendingChart" style="height: 400px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="roasComparisonYear" style="width: auto;" onchange="updateRoasComparison()">
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025" selected>2025</option>
+                                        </select>
+                                    </div>
+                                    <div id="roasComparisonChart"></div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="salesGoalYear" style="width: auto;" onchange="updateSalesGoal()">
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025" selected>2025</option>
+                                        </select>
+                                    </div>
+                                    <div id="salesGoalChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Análisis Mensual de ROAS e Inversión -->
+                        <h4 class="mb-3 mt-4">Análisis Mensual</h4>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="monthlyRoasYear" style="width: auto;" onchange="updateMonthlyRoas()">
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025" selected>2025</option>
+                                        </select>
+                                    </div>
+                                    <div id="monthlyRoasChart" style="height: 400px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="monthlySpendingYear" style="width: auto;" onchange="updateMonthlySpending()">
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025" selected>2025</option>
+                                        </select>
+                                    </div>
+                                    <div id="monthlySpendingChart" style="height: 400px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 class="mb-3 mt-4">Proyección de Inversión 2026</h4>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="monthlyProjectionChart" style="height: 400px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    {% endif %}
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const trendData = {{ trend_chart | safe }};
+        const compData = {{ comp_chart | safe }};
+        const productData = {{ top_products_chart | safe }};
+        const yearlyData = {{ yearly_chart | safe }};
+        {% if category_chart %}
+        const categoryData = {{ category_chart | safe }};
+        {% else %}
+        const categoryData = null;
+        {% endif %}
+        {% if historical_monthly_chart %}
+        const historicalMonthlyData = {{ historical_monthly_chart | safe }};
+        {% else %}
+        const historicalMonthlyData = null;
+        {% endif %}
+
+        // Nuevos gráficos de publicidad
+        {% if ads_spending_chart %}
+        const adsSpendingData = {{ ads_spending_chart | safe }};
+        {% endif %}
+        {% if roas_comparison_chart %}
+        const roasComparisonData = {{ roas_comparison_chart | safe }};
+        {% endif %}
+        {% if sales_goal_chart %}
+        const salesGoalData = {{ sales_goal_chart | safe }};
+        {% endif %}
+        {% if monthly_roas_chart %}
+        const monthlyRoasData = {{ monthly_roas_chart | safe }};
+        {% endif %}
+        {% if monthly_spending_chart %}
+        const monthlySpendingData = {{ monthly_spending_chart | safe }};
+        {% endif %}
+        {% if monthly_projection_chart %}
+        const monthlyProjectionData = {{ monthly_projection_chart | safe }};
+        {% endif %}
+
+        // Gráficos de comparación año a año
+        {% if yoy_comparison_chart %}
+        const yoyComparisonData = {{ yoy_comparison_chart | safe }};
+        {% endif %}
+        {% if yoy_detailed_chart %}
+        const yoyDetailedData = {{ yoy_detailed_chart | safe }};
+        {% endif %}
+
+        // Renderizar gráficos principales
+        Plotly.newPlot('trendChart', trendData.data, trendData.layout, {responsive: true});
+        Plotly.newPlot('compChart', compData.data, compData.layout, {responsive: true});
+        Plotly.newPlot('topProductsChart', productData.data, productData.layout, {responsive: true});
+        Plotly.newPlot('yearlyChart', yearlyData.data, yearlyData.layout, {responsive: true});
+        if (categoryData) Plotly.newPlot('categoryChart', categoryData.data, categoryData.layout, {responsive: true});
+        if (historicalMonthlyData) Plotly.newPlot('historicalMonthlyChart', historicalMonthlyData.data, historicalMonthlyData.layout, {responsive: true});
+
+        // Renderizar gráficos de publicidad (solo si existen)
+        {% if ads_spending_chart %}
+        if (adsSpendingData) Plotly.newPlot('adsSpendingChart', adsSpendingData.data, adsSpendingData.layout, {responsive: true});
+        {% endif %}
+        {% if roas_comparison_chart %}
+        if (roasComparisonData) Plotly.newPlot('roasComparisonChart', roasComparisonData.data, roasComparisonData.layout, {responsive: true});
+        {% endif %}
+        {% if sales_goal_chart %}
+        if (salesGoalData) Plotly.newPlot('salesGoalChart', salesGoalData.data, salesGoalData.layout, {responsive: true});
+        {% endif %}
+        {% if monthly_roas_chart %}
+        if (monthlyRoasData) Plotly.newPlot('monthlyRoasChart', monthlyRoasData.data, monthlyRoasData.layout, {responsive: true});
+        {% endif %}
+        {% if monthly_spending_chart %}
+        if (monthlySpendingData) Plotly.newPlot('monthlySpendingChart', monthlySpendingData.data, monthlySpendingData.layout, {responsive: true});
+        {% endif %}
+        {% if monthly_projection_chart %}
+        if (monthlyProjectionData) Plotly.newPlot('monthlyProjectionChart', monthlyProjectionData.data, monthlyProjectionData.layout, {responsive: true});
+        {% endif %}
+
+        // Renderizar gráficos de comparación año a año
+        {% if yoy_comparison_chart %}
+        if (yoyComparisonData) Plotly.newPlot('yoyComparisonChart', yoyComparisonData.data, yoyComparisonData.layout, {responsive: true});
+        {% endif %}
+        {% if yoy_detailed_chart %}
+        if (yoyDetailedData) Plotly.newPlot('yoyDetailedChart', yoyDetailedData.data, yoyDetailedData.layout, {responsive: true});
+        {% endif %}
+
+        // Corregir problemas de ancho cuando los gráficos están en pestañas ocultas
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
+            tabEl.addEventListener('shown.bs.tab', function (event) {
+                const targetId = event.target.getAttribute('data-bs-target');
+                const charts = document.querySelectorAll(targetId + ' .js-plotly-plot');
+                charts.forEach(chart => {
+                    Plotly.Plots.resize(chart);
+                });
+            });
+        });
+
+        async function updateProj() {
+            const growth = document.getElementById('growthRange').value;
+            const roasMeta = parseFloat(document.getElementById('roasMetaRange').value);
+            const roasTiktok = parseFloat(document.getElementById('roasTiktokRange').value);
+            const baseYear = document.getElementById('yearSelect').value;
+
+            // Actualizar badges
+            document.getElementById('growthVal').innerText = growth + '%';
+            document.getElementById('roasMetaVal').innerText = roasMeta + 'x';
+            document.getElementById('roasTiktokVal').innerText = roasTiktok + 'x';
+
+            // Validación client-side
+            if (roasMeta <= 0 || roasTiktok <= 0) {
+                alert('ROAS debe ser mayor a 0');
+                return;
+            }
+
+            const response = await fetch('/recalculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    growth: growth,
+                    roas_meta: roasMeta,
+                    roas_tiktok: roasTiktok,
+                    base_year: baseYear
+                })
+            });
+
+            const result = await response.json();
+
+            // Update Summary
+            document.getElementById('totalSales').innerText = result.summary.total_sales;
+            document.getElementById('totalProfit').innerText = result.summary.total_profit;
+            document.getElementById('totalCogs').innerText = result.summary.total_cogs;
+            document.getElementById('totalAds').innerText = result.summary.total_ads;
+
+            // Update Charts
+            const newTrend = JSON.parse(result.trend_chart);
+            const newComp = JSON.parse(result.comp_chart);
+
+            Plotly.react('trendChart', newTrend.data, newTrend.layout);
+            Plotly.react('compChart', newComp.data, newComp.layout);
+
+            // Update ROAS chart if present
+            if (result.roas_comparison_chart) {
+                const newRoas = JSON.parse(result.roas_comparison_chart);
+                Plotly.react('roasComparisonChart', newRoas.data, newRoas.layout);
+            }
+
+            // Update Monthly Projection chart if present
+            if (result.monthly_projection_chart) {
+                const newMonthlyProj = JSON.parse(result.monthly_projection_chart);
+                Plotly.react('monthlyProjectionChart', newMonthlyProj.data, newMonthlyProj.layout);
+            }
+        }
+
+        // Funciones para actualizar gráficos individuales por año
+        async function updateRoasComparison() {
+            const year = document.getElementById('roasComparisonYear').value;
+            const roasMeta = parseFloat(document.getElementById('roasMetaRange').value);
+            const roasTiktok = parseFloat(document.getElementById('roasTiktokRange').value);
+
+            const response = await fetch(`/api/roas_comparison/${year}?roas_meta=${roasMeta}&roas_tiktok=${roasTiktok}`);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('roasComparisonChart', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateSalesGoal() {
+            const year = document.getElementById('salesGoalYear').value;
+
+            const response = await fetch(`/api/sales_goal/${year}`);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('salesGoalChart', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateMonthlyRoas() {
+            const year = document.getElementById('monthlyRoasYear').value;
+
+            const response = await fetch(`/api/monthly_roas/${year}`);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('monthlyRoasChart', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateMonthlySpending() {
+            const year = document.getElementById('monthlySpendingYear').value;
+
+            const response = await fetch(`/api/monthly_spending/${year}`);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('monthlySpendingChart', chartData.data, chartData.layout);
+            }
+        }
+
+        // Botón Scroll to Top - esperar a que el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+
+            if (scrollTopBtn) {
+                // Mostrar/ocultar botón basado en scroll
+                window.addEventListener('scroll', function() {
+                    if (window.pageYOffset > 300) {
+                        scrollTopBtn.style.display = 'flex';
+                    } else {
+                        scrollTopBtn.style.display = 'none';
+                    }
+                });
+
+                // Scroll suave al hacer click
+                scrollTopBtn.addEventListener('click', function() {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                });
+            }
+        });
+    </script>
+
+    <!-- Botón flotante Scroll to Top -->
+    <button id="scrollTopBtn" style="
+        display: none;
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        z-index: 1000;
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        font-size: 48px;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    " onmouseover="this.style.transform='scale(1.1) translateY(-5px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.6)';"
+       onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.4)';"
+       title="Volver arriba">
+        ↑
+    </button>
+
+</body>
+</html>
