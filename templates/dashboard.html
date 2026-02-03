@@ -65,8 +65,30 @@
 
                 <hr>
 
+                <!-- Selector de Tipo de Proyección -->
                 <div class="mb-4">
-                    <label class="form-label">Crecimiento Ventas (%)</label>
+                    <label class="form-label">Tipo de Proyección</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="projectionType" id="projTypeSales" value="sales" checked onchange="updateProj()">
+                        <label class="form-check-label" for="projTypeSales">
+                            📊 Crecimiento en Ventas
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="projectionType" id="projTypeProfit" value="profit" onchange="updateProj()">
+                        <label class="form-check-label" for="projTypeProfit">
+                            💰 Crecimiento en Ganancias
+                        </label>
+                    </div>
+                    <small class="text-secondary d-block mt-2" id="projectionTypeHelp">
+                        Proyecta el crecimiento en ventas totales
+                    </small>
+                </div>
+
+                <hr>
+
+                <div class="mb-4">
+                    <label class="form-label" id="growthLabel">Crecimiento Ventas (%)</label>
                     <input type="range" class="form-range" id="growthRange" min="-50" max="200" value="{{ growth }}" oninput="updateProj()">
                     <span id="growthVal" class="badge bg-primary">{{ growth }}%</span>
                 </div>
@@ -109,6 +131,11 @@
                         </button>
                     </li>
                     {% endif %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="custom-budget-tab" data-bs-toggle="tab" data-bs-target="#custom-budget-content" type="button" role="tab" aria-controls="custom-budget-content" aria-selected="false">
+                            💰 Presupuesto Personalizado
+                        </button>
+                    </li>
                 </ul>
 
                 <!-- Tab Content -->
@@ -154,7 +181,25 @@
                             </div>
                             <div class="col-lg-6">
                                 <div class="card p-3 mb-4">
-                                    <div id="compChart"></div>
+                                    <div id="yoyComparisonChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top 20 Productos Más Rentables -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="top20Chart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Productos "Huesos" (Baja Rotación) -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div id="deadStockChart"></div>
                                 </div>
                             </div>
                         </div>
@@ -192,20 +237,15 @@
                         </div>
 
                         <!-- Comparación Año a Año -->
-                        {% if yoy_comparison_chart %}
+                        {% if yoy_detailed_chart %}
                         <div class="row mt-4">
                             <div class="col-lg-12">
-                                <h4 class="mb-3">📊 Análisis de Crecimiento Histórico</h4>
+                                <h4 class="mb-3">📊 Análisis de Crecimiento Detallado</h4>
                             </div>
                         </div>
 
                         <div class="row">
-                            <div class="col-lg-6">
-                                <div class="card p-3 mb-4">
-                                    <div id="yoyComparisonChart"></div>
-                                </div>
-                            </div>
-                            <div class="col-lg-6">
+                            <div class="col-lg-12">
                                 <div class="card p-3 mb-4">
                                     <div id="yoyDetailedChart"></div>
                                 </div>
@@ -312,6 +352,23 @@
                             </div>
                         </div>
 
+                        <!-- Distribución de Ventas: Ads vs Orgánicas -->
+                        <div class="row mt-4">
+                            <div class="col-lg-6">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="attributionYear" style="width: auto;" onchange="updateAttribution()">
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025" selected>2025</option>
+                                            <option value="2026">2026 (Proyección)</option>
+                                        </select>
+                                    </div>
+                                    <div id="attributionChart"></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Análisis Mensual de ROAS e Inversión -->
                         <h4 class="mb-3 mt-4">Análisis Mensual</h4>
 
@@ -323,6 +380,7 @@
                                             <option value="2023">2023</option>
                                             <option value="2024">2024</option>
                                             <option value="2025" selected>2025</option>
+                                            <option value="2026">2026 (Proyección)</option>
                                         </select>
                                     </div>
                                     <div id="monthlyRoasChart" style="height: 400px;"></div>
@@ -358,6 +416,186 @@
                     </div>
                     {% endif %}
 
+                    <!-- TAB 3: PRESUPUESTO PERSONALIZADO -->
+                    <div class="tab-pane fade" id="custom-budget-content" role="tabpanel" aria-labelledby="custom-budget-tab">
+
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-primary text-white">
+                                        <h5 class="mb-1">📊 Configura tu Presupuesto Mensual</h5>
+                                        <p class="mb-0 small">Define cuánto planeas invertir cada mes en publicidad para META y TIKTOK</p>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- Botones de plantillas rápidas -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Plantillas Rápidas:</label>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="applyTemplate('uniform')">
+                                                    📊 Uniforme
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-success" onclick="applyTemplate('growth')">
+                                                    📈 Crecimiento
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="applyTemplate('seasonal')">
+                                                    🌤️ Estacional
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-info" onclick="applyTemplate('historical')">
+                                                    📅 Histórico
+                                                </button>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">Usa una plantilla para llenar rápidamente la tabla, luego ajusta manualmente</small>
+                                        </div>
+
+                                        <!-- Gestión de escenarios -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Gestión de Escenarios:</label>
+                                            <div class="btn-group me-2" role="group">
+                                                <button type="button" class="btn btn-sm btn-outline-success" onclick="saveScenario()">
+                                                    💾 Guardar Escenario
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadScenario()">
+                                                    📂 Cargar Escenario
+                                                </button>
+                                            </div>
+                                            <div class="btn-group me-2" role="group">
+                                                <button type="button" class="btn btn-sm btn-outline-info" onclick="exportToCSV()">
+                                                    📤 Exportar CSV
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="document.getElementById('csvFileInput').click()">
+                                                    📥 Importar CSV
+                                                </button>
+                                                <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="importFromCSV(event)">
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearTable()">
+                                                🗑️ Limpiar Tabla
+                                            </button>
+                                            <small class="text-muted d-block mt-1">Guarda múltiples escenarios y compáralos. Exporta/importa CSV para edición masiva.</small>
+                                        </div>
+
+                                        <!-- Tabla de inputs -->
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered table-hover" id="budgetTable">
+                                                <thead class="table-dark">
+                                                    <tr>
+                                                        <th>Mes</th>
+                                                        <th class="text-center">META (S/)</th>
+                                                        <th class="text-center">TIKTOK (S/)</th>
+                                                        <th class="text-center">Total (S/)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="budgetTableBody">
+                                                    <!-- 12 filas generadas por JavaScript -->
+                                                </tbody>
+                                                <tfoot class="table-secondary fw-bold">
+                                                    <tr>
+                                                        <td>TOTAL ANUAL</td>
+                                                        <td class="text-center" id="totalMetaBudget">S/ 0</td>
+                                                        <td class="text-center" id="totalTiktokBudget">S/ 0</td>
+                                                        <td class="text-center" id="totalBudget">S/ 0</td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+
+                                        <!-- Botón calcular -->
+                                        <div class="d-grid gap-2 mt-3">
+                                            <button class="btn btn-primary btn-lg" id="calculateBtn" onclick="calculateCustomProjection()">
+                                                🚀 Calcular Proyección
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sección de resultados (oculta inicialmente) -->
+                        <div id="resultsSection" style="display: none;">
+                            <!-- KPIs de comparación -->
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card border-primary">
+                                        <div class="card-header bg-primary text-white">
+                                            <h6 class="mb-0">Proyección ROAS Tradicional</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Ventas Anuales</small>
+                                                    <h4 id="roasSales" class="text-primary mb-0">-</h4>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Utilidad Neta</small>
+                                                    <h4 id="roasProfit" class="text-success mb-0">-</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card border-success">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0">Tu Presupuesto Personalizado</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Ventas Anuales</small>
+                                                    <h4 id="customSales" class="text-primary mb-0">-</h4>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Utilidad Neta</small>
+                                                    <h4 id="customProfit" class="text-success mb-0">-</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico de comparación -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5 class="mb-0">📊 Comparación Mes a Mes</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="comparisonChart" style="height: 500px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Análisis de eficiencia -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5 class="mb-0">⚡ Análisis de Eficiencia del Presupuesto</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">Score de Eficiencia vs Histórico</label>
+                                                <div class="progress" style="height: 30px;">
+                                                    <div id="efficiencyBar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+                                                </div>
+                                                <small class="text-muted">95-105% = Óptimo | 85-95% o 105-120% = Aceptable | Fuera de rango = Revisar</small>
+                                            </div>
+
+                                            <!-- Alertas -->
+                                            <div id="alertsSection"></div>
+
+                                            <!-- Sugerencias -->
+                                            <div id="suggestionsSection"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
                 </div>
             </main>
         </div>
@@ -366,7 +604,16 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const trendData = {{ trend_chart | safe }};
-        const compData = {{ comp_chart | safe }};
+        {% if top_20_chart %}
+        const top20Data = {{ top_20_chart | safe }};
+        {% else %}
+        const top20Data = null;
+        {% endif %}
+        {% if dead_stock_chart %}
+        const deadStockData = {{ dead_stock_chart | safe }};
+        {% else %}
+        const deadStockData = null;
+        {% endif %}
         const productData = {{ top_products_chart | safe }};
         const yearlyData = {{ yearly_chart | safe }};
         {% if category_chart %}
@@ -390,6 +637,9 @@
         {% if sales_goal_chart %}
         const salesGoalData = {{ sales_goal_chart | safe }};
         {% endif %}
+        {% if attribution_chart %}
+        const attributionData = {{ attribution_chart | safe }};
+        {% endif %}
         {% if monthly_roas_chart %}
         const monthlyRoasData = {{ monthly_roas_chart | safe }};
         {% endif %}
@@ -410,7 +660,8 @@
 
         // Renderizar gráficos principales
         Plotly.newPlot('trendChart', trendData.data, trendData.layout, {responsive: true});
-        Plotly.newPlot('compChart', compData.data, compData.layout, {responsive: true});
+        if (top20Data) Plotly.newPlot('top20Chart', top20Data.data, top20Data.layout, {responsive: true});
+        if (deadStockData) Plotly.newPlot('deadStockChart', deadStockData.data, deadStockData.layout, {responsive: true});
         Plotly.newPlot('topProductsChart', productData.data, productData.layout, {responsive: true});
         Plotly.newPlot('yearlyChart', yearlyData.data, yearlyData.layout, {responsive: true});
         if (categoryData) Plotly.newPlot('categoryChart', categoryData.data, categoryData.layout, {responsive: true});
@@ -425,6 +676,9 @@
         {% endif %}
         {% if sales_goal_chart %}
         if (salesGoalData) Plotly.newPlot('salesGoalChart', salesGoalData.data, salesGoalData.layout, {responsive: true});
+        {% endif %}
+        {% if attribution_chart %}
+        if (attributionData) Plotly.newPlot('attributionChart', attributionData.data, attributionData.layout, {responsive: true});
         {% endif %}
         {% if monthly_roas_chart %}
         if (monthlyRoasData) Plotly.newPlot('monthlyRoasChart', monthlyRoasData.data, monthlyRoasData.layout, {responsive: true});
@@ -461,6 +715,19 @@
             const roasTiktok = parseFloat(document.getElementById('roasTiktokRange').value);
             const baseYear = document.getElementById('yearSelect').value;
 
+            // Obtener tipo de proyección seleccionado
+            const projectionType = document.querySelector('input[name="projectionType"]:checked').value;
+            console.log('=== DEBUG: Projection type selected:', projectionType);
+
+            // Actualizar etiquetas basadas en tipo de proyección
+            if (projectionType === 'profit') {
+                document.getElementById('growthLabel').innerText = 'Crecimiento Ganancias (%)';
+                document.getElementById('projectionTypeHelp').innerText = 'Proyecta el crecimiento en utilidad neta (ganancias)';
+            } else {
+                document.getElementById('growthLabel').innerText = 'Crecimiento Ventas (%)';
+                document.getElementById('projectionTypeHelp').innerText = 'Proyecta el crecimiento en ventas totales';
+            }
+
             // Actualizar badges
             document.getElementById('growthVal').innerText = growth + '%';
             document.getElementById('roasMetaVal').innerText = roasMeta + 'x';
@@ -479,7 +746,8 @@
                     growth: growth,
                     roas_meta: roasMeta,
                     roas_tiktok: roasTiktok,
-                    base_year: baseYear
+                    base_year: baseYear,
+                    projection_type: projectionType
                 })
             });
 
@@ -493,10 +761,9 @@
 
             // Update Charts
             const newTrend = JSON.parse(result.trend_chart);
-            const newComp = JSON.parse(result.comp_chart);
 
             Plotly.react('trendChart', newTrend.data, newTrend.layout);
-            Plotly.react('compChart', newComp.data, newComp.layout);
+            // Los gráficos Top 20 y Huesos no necesitan recalcular (son estáticos)
 
             // Update ROAS chart if present
             if (result.roas_comparison_chart) {
@@ -535,6 +802,18 @@
             if (result.chart) {
                 const chartData = JSON.parse(result.chart);
                 Plotly.react('salesGoalChart', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateAttribution() {
+            const year = document.getElementById('attributionYear').value;
+
+            const response = await fetch(`/api/sales_attribution/${year}`);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('attributionChart', chartData.data, chartData.layout);
             }
         }
 
@@ -584,7 +863,437 @@
                     });
                 });
             }
+
+            // ============================================================
+            // FUNCIONES PARA PRESUPUESTO PERSONALIZADO
+            // ============================================================
+
+            // Inicializar tabla de presupuesto
+            initBudgetTable();
         });
+
+        // Meses en español
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+        // Inicializar tabla de presupuesto
+        function initBudgetTable() {
+            const tbody = document.getElementById('budgetTableBody');
+            if (!tbody) return; // Si no existe el elemento, salir
+
+            tbody.innerHTML = '';
+
+            for (let i = 1; i <= 12; i++) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="fw-bold">${meses[i-1]}</td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end"
+                               id="meta_${i}" min="0" step="100" value="0"
+                               oninput="updateTotals()">
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end"
+                               id="tiktok_${i}" min="0" step="100" value="0"
+                               oninput="updateTotals()">
+                    </td>
+                    <td class="text-center fw-bold" id="total_${i}">S/ 0</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        // Actualizar totales en tiempo real
+        function updateTotals() {
+            let totalMeta = 0;
+            let totalTiktok = 0;
+
+            for (let i = 1; i <= 12; i++) {
+                const metaVal = parseFloat(document.getElementById(`meta_${i}`).value) || 0;
+                const tiktokVal = parseFloat(document.getElementById(`tiktok_${i}`).value) || 0;
+                const monthTotal = metaVal + tiktokVal;
+
+                document.getElementById(`total_${i}`).textContent = `S/ ${monthTotal.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+
+                totalMeta += metaVal;
+                totalTiktok += tiktokVal;
+            }
+
+            document.getElementById('totalMetaBudget').textContent = `S/ ${totalMeta.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+            document.getElementById('totalTiktokBudget').textContent = `S/ ${totalTiktok.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+            document.getElementById('totalBudget').textContent = `S/ ${(totalMeta + totalTiktok).toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+        }
+
+        // Aplicar plantillas rápidas
+        async function applyTemplate(templateType) {
+            switch(templateType) {
+                case 'uniform':
+                    const amount = prompt('¿Qué monto mensual deseas para ambas plataformas?', '2000');
+                    if (amount) {
+                        const metaAmount = parseFloat(amount) * 0.6; // 60% META
+                        const tiktokAmount = parseFloat(amount) * 0.4; // 40% TIKTOK
+                        for (let i = 1; i <= 12; i++) {
+                            document.getElementById(`meta_${i}`).value = metaAmount;
+                            document.getElementById(`tiktok_${i}`).value = tiktokAmount;
+                        }
+                    }
+                    break;
+
+                case 'growth':
+                    const startAmount = prompt('Monto inicial (mes 1):', '2000');
+                    const growthPct = prompt('% de crecimiento mensual:', '5');
+                    if (startAmount && growthPct) {
+                        let current = parseFloat(startAmount);
+                        const growth = parseFloat(growthPct) / 100;
+                        for (let i = 1; i <= 12; i++) {
+                            document.getElementById(`meta_${i}`).value = Math.round(current * 0.6);
+                            document.getElementById(`tiktok_${i}`).value = Math.round(current * 0.4);
+                            current = current * (1 + growth);
+                        }
+                    }
+                    break;
+
+                case 'seasonal':
+                    // Patrón estacional: bajo en ene-feb, medio mar-ago, alto sep-dic
+                    const baseAmount = prompt('Monto base:', '2000');
+                    if (baseAmount) {
+                        const base = parseFloat(baseAmount);
+                        const pattern = [0.7, 0.7, 0.9, 0.9, 1.0, 1.0, 1.0, 1.0, 1.2, 1.2, 1.4, 1.5];
+                        for (let i = 1; i <= 12; i++) {
+                            document.getElementById(`meta_${i}`).value = Math.round(base * pattern[i-1] * 0.6);
+                            document.getElementById(`tiktok_${i}`).value = Math.round(base * pattern[i-1] * 0.4);
+                        }
+                    }
+                    break;
+
+                case 'historical':
+                    await loadHistoricalBudgets();
+                    break;
+            }
+            updateTotals();
+        }
+
+        // Validar inputs
+        function validateBudgetInputs() {
+            for (let i = 1; i <= 12; i++) {
+                const metaVal = document.getElementById(`meta_${i}`).value;
+                const tiktokVal = document.getElementById(`tiktok_${i}`).value;
+
+                if (metaVal === '' || tiktokVal === '') {
+                    alert(`Por favor completa todos los meses. Falta: ${meses[i-1]}`);
+                    return false;
+                }
+
+                if (parseFloat(metaVal) < 0 || parseFloat(tiktokVal) < 0) {
+                    alert('No se permiten valores negativos');
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Calcular proyección custom
+        async function calculateCustomProjection() {
+            if (!validateBudgetInputs()) {
+                return;
+            }
+
+            // Mostrar loading
+            const btn = document.getElementById('calculateBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calculando...';
+
+            // Recopilar datos
+            const monthly_budgets = {
+                META: {},
+                TIKTOK: {}
+            };
+
+            for (let i = 1; i <= 12; i++) {
+                monthly_budgets.META[i] = parseFloat(document.getElementById(`meta_${i}`).value);
+                monthly_budgets.TIKTOK[i] = parseFloat(document.getElementById(`tiktok_${i}`).value);
+            }
+
+            const baseYear = document.getElementById('yearSelect').value;
+
+            try {
+                const response = await fetch('/api/custom_budget_projection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        base_year: baseYear,
+                        monthly_budgets: monthly_budgets
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Error en el servidor');
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                alert('Error al calcular proyección: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Calcular Proyección';
+            }
+        }
+
+        // Mostrar resultados
+        function displayResults(data) {
+            // Mostrar sección de resultados
+            document.getElementById('resultsSection').style.display = 'block';
+
+            // Actualizar KPIs
+            const summary = data.summary;
+            document.getElementById('roasSales').textContent = `S/ ${summary.roas_total_sales.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+            document.getElementById('roasProfit').textContent = `S/ ${summary.roas_total_profit.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+            document.getElementById('customSales').textContent = `S/ ${summary.custom_total_sales.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+            document.getElementById('customProfit').textContent = `S/ ${summary.custom_total_profit.toLocaleString('es-PE', {minimumFractionDigits: 0})}`;
+
+            // Renderizar gráfico de comparación
+            const chartData = JSON.parse(data.comparison_chart);
+            Plotly.newPlot('comparisonChart', chartData.data, chartData.layout);
+
+            // Análisis de eficiencia
+            const efficiency = data.efficiency_analysis;
+            const effBar = document.getElementById('efficiencyBar');
+            effBar.style.width = `${efficiency.efficiency_score}%`;
+            effBar.textContent = `${efficiency.efficiency_score.toFixed(1)}%`;
+
+            // Color del bar según eficiencia
+            effBar.className = 'progress-bar';
+            if (efficiency.efficiency_score >= 95 && efficiency.efficiency_score <= 105) {
+                effBar.classList.add('bg-success');
+            } else if (efficiency.efficiency_score >= 85 && efficiency.efficiency_score <= 120) {
+                effBar.classList.add('bg-warning');
+            } else {
+                effBar.classList.add('bg-danger');
+            }
+
+            // Mostrar alertas
+            const alertsDiv = document.getElementById('alertsSection');
+            if (efficiency.alerts && efficiency.alerts.length > 0) {
+                let alertsHtml = '<h6 class="mt-3">⚠️ Alertas:</h6><ul class="list-group">';
+                efficiency.alerts.forEach(alert => {
+                    alertsHtml += `<li class="list-group-item list-group-item-warning">
+                        <strong>${alert.mes} - ${alert.platform}:</strong> ${alert.mensaje}
+                    </li>`;
+                });
+                alertsHtml += '</ul>';
+                alertsDiv.innerHTML = alertsHtml;
+            } else {
+                alertsDiv.innerHTML = '<p class="text-success mt-3">✅ No hay alertas. Tu presupuesto está bien balanceado.</p>';
+            }
+
+            // Mostrar sugerencias
+            const suggestionsDiv = document.getElementById('suggestionsSection');
+            if (efficiency.suggestions && efficiency.suggestions.length > 0) {
+                let suggestionsHtml = '<h6 class="mt-3">💡 Sugerencias:</h6><ul class="list-group">';
+                efficiency.suggestions.forEach(suggestion => {
+                    suggestionsHtml += `<li class="list-group-item list-group-item-info">${suggestion}</li>`;
+                });
+                suggestionsHtml += '</ul>';
+                suggestionsDiv.innerHTML = suggestionsHtml;
+            } else {
+                suggestionsDiv.innerHTML = '';
+            }
+
+            // Scroll a resultados
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Re-renderizar gráficos cuando se cambia de tab
+        const customBudgetTab = document.getElementById('custom-budget-tab');
+        if (customBudgetTab) {
+            customBudgetTab.addEventListener('shown.bs.tab', function() {
+                // Resize charts si existen
+                if (document.getElementById('comparisonChart').children.length > 0) {
+                    Plotly.Plots.resize('comparisonChart');
+                }
+            });
+        }
+
+        // ============================================================
+        // FUNCIONES NUEVAS: GESTIÓN DE ESCENARIOS Y DATOS
+        // ============================================================
+
+        // Cargar presupuestos históricos reales
+        async function loadHistoricalBudgets() {
+            const baseYear = document.getElementById('yearSelect').value;
+            const year = baseYear === 'all' ? 2025 : parseInt(baseYear);
+
+            try {
+                const response = await fetch(`/api/historical_budgets/${year}`);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(error.error || 'No hay datos históricos disponibles para este año');
+                    return;
+                }
+
+                const data = await response.json();
+                const budgets = data.budgets;
+
+                // Llenar la tabla con los datos históricos
+                for (let i = 1; i <= 12; i++) {
+                    document.getElementById(`meta_${i}`).value = budgets.META[i] || 0;
+                    document.getElementById(`tiktok_${i}`).value = budgets.TIKTOK[i] || 0;
+                }
+
+                updateTotals();
+                alert(`Gastos históricos del año ${data.year} cargados exitosamente.`);
+
+            } catch (error) {
+                alert('Error al cargar datos históricos: ' + error.message);
+            }
+        }
+
+        // Guardar escenario en localStorage
+        function saveScenario() {
+            const scenarioName = prompt('Nombre del escenario:', `Escenario ${new Date().toLocaleDateString()}`);
+            if (!scenarioName) return;
+
+            const budgets = {
+                META: {},
+                TIKTOK: {}
+            };
+
+            for (let i = 1; i <= 12; i++) {
+                budgets.META[i] = parseFloat(document.getElementById(`meta_${i}`).value) || 0;
+                budgets.TIKTOK[i] = parseFloat(document.getElementById(`tiktok_${i}`).value) || 0;
+            }
+
+            // Obtener escenarios guardados
+            let scenarios = JSON.parse(localStorage.getItem('budget_scenarios') || '{}');
+
+            scenarios[scenarioName] = {
+                budgets: budgets,
+                saved_at: new Date().toISOString()
+            };
+
+            localStorage.setItem('budget_scenarios', JSON.stringify(scenarios));
+            alert(`Escenario "${scenarioName}" guardado exitosamente.`);
+        }
+
+        // Cargar escenario desde localStorage
+        function loadScenario() {
+            let scenarios = JSON.parse(localStorage.getItem('budget_scenarios') || '{}');
+
+            if (Object.keys(scenarios).length === 0) {
+                alert('No hay escenarios guardados. Guarda un escenario primero.');
+                return;
+            }
+
+            // Crear lista de escenarios
+            let scenarioList = 'Escenarios guardados:\n\n';
+            Object.keys(scenarios).forEach((name, index) => {
+                const date = new Date(scenarios[name].saved_at).toLocaleString();
+                scenarioList += `${index + 1}. ${name} (${date})\n`;
+            });
+
+            const scenarioName = prompt(scenarioList + '\nIngresa el nombre del escenario a cargar:');
+            if (!scenarioName) return;
+
+            if (scenarios[scenarioName]) {
+                const budgets = scenarios[scenarioName].budgets;
+
+                for (let i = 1; i <= 12; i++) {
+                    document.getElementById(`meta_${i}`).value = budgets.META[i];
+                    document.getElementById(`tiktok_${i}`).value = budgets.TIKTOK[i];
+                }
+
+                updateTotals();
+                alert(`Escenario "${scenarioName}" cargado exitosamente.`);
+            } else {
+                alert('Escenario no encontrado.');
+            }
+        }
+
+        // Exportar a CSV
+        function exportToCSV() {
+            let csv = 'Mes,META,TIKTOK\n';
+
+            for (let i = 1; i <= 12; i++) {
+                const meta = document.getElementById(`meta_${i}`).value || 0;
+                const tiktok = document.getElementById(`tiktok_${i}`).value || 0;
+                csv += `${meses[i-1]},${meta},${tiktok}\n`;
+            }
+
+            // Crear blob y descargar
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', `presupuesto_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            alert('CSV exportado exitosamente.');
+        }
+
+        // Importar desde CSV
+        function importFromCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const text = e.target.result;
+                    const lines = text.split('\n');
+
+                    // Saltar header
+                    for (let i = 1; i < lines.length && i <= 12; i++) {
+                        const columns = lines[i].split(',');
+                        if (columns.length >= 3) {
+                            const meta = parseFloat(columns[1].trim()) || 0;
+                            const tiktok = parseFloat(columns[2].trim()) || 0;
+
+                            document.getElementById(`meta_${i}`).value = meta;
+                            document.getElementById(`tiktok_${i}`).value = tiktok;
+                        }
+                    }
+
+                    updateTotals();
+                    alert('CSV importado exitosamente.');
+
+                } catch (error) {
+                    alert('Error al importar CSV: ' + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+
+            // Reset input para poder importar el mismo archivo de nuevo
+            event.target.value = '';
+        }
+
+        // Limpiar tabla
+        function clearTable() {
+            if (!confirm('¿Estás seguro de que quieres limpiar toda la tabla?')) {
+                return;
+            }
+
+            for (let i = 1; i <= 12; i++) {
+                document.getElementById(`meta_${i}`).value = 0;
+                document.getElementById(`tiktok_${i}`).value = 0;
+            }
+
+            updateTotals();
+
+            // Ocultar sección de resultados si está visible
+            document.getElementById('resultsSection').style.display = 'none';
+        }
     </script>
 
     <!-- Botón flotante Scroll to Top -->
