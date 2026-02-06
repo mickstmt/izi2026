@@ -136,6 +136,11 @@
                             💰 Presupuesto Personalizado
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="custom-charts-tab" data-bs-toggle="tab" data-bs-target="#custom-charts-content" type="button" role="tab" aria-controls="custom-charts-content" aria-selected="false">
+                            📊 Personalizados
+                        </button>
+                    </li>
                 </ul>
 
                 <!-- Tab Content -->
@@ -345,6 +350,7 @@
                                             <option value="2023">2023</option>
                                             <option value="2024">2024</option>
                                             <option value="2025" selected>2025</option>
+                                            <option value="2026">2026 (Proyección)</option>
                                         </select>
                                     </div>
                                     <div id="salesGoalChart"></div>
@@ -412,6 +418,48 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Tabla de Historial de Ventas y Ganancias -->
+                        <h4 class="mb-3 mt-4">Historial de Ventas y Ganancias</h4>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="salesTableYear" style="width: auto;" onchange="updateSalesTable()">
+                                            <option value="all" selected>Todos los años</option>
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025">2025</option>
+                                            <option value="2026">2026</option>
+                                        </select>
+                                    </div>
+                                    <div id="monthlySalesTable"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tabla de Gastos en Publicidad -->
+                        {% if monthly_ads_table %}
+                        <h4 class="mb-3 mt-4">Gastos en Publicidad (META y TIKTOK)</h4>
+
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card p-3 mb-4">
+                                    <div class="d-flex justify-content-end mb-2">
+                                        <select class="form-select form-select-sm" id="adsTableYear" style="width: auto;" onchange="updateAdsTable()">
+                                            <option value="all" selected>Todos los años</option>
+                                            <option value="2023">2023</option>
+                                            <option value="2024">2024</option>
+                                            <option value="2025">2025</option>
+                                            <option value="2026">2026</option>
+                                        </select>
+                                    </div>
+                                    <div id="monthlyAdsTable"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                     </div>
                     {% endif %}
@@ -596,6 +644,228 @@
 
                     </div>
 
+                    <!-- Custom Charts Tab -->
+                    <div class="tab-pane fade" id="custom-charts-content" role="tabpanel" aria-labelledby="custom-charts-tab">
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="mb-3">Gráficos Históricos Personalizados</h4>
+                                <p class="text-secondary">Análisis históricos y tendencias personalizadas de tu negocio.</p>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico Histórico Mensual -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="mb-0">📈 Histórico Mensual de Ventas y Ganancias</h5>
+                                        <small>Comparación año a año (2023-2025)</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <img src="/static/historico_mensual_ventas_ganancias.png" class="img-fluid" alt="Histórico Mensual">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Estadísticas de Tendencia -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="card text-white bg-primary">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2023</h6>
+                                        <p class="mb-1"><strong>Ventas:</strong> S/ 301,583</p>
+                                        <p class="mb-0"><strong>Ganancia:</strong> S/ 170,412</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-white bg-warning">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2024 vs 2023</h6>
+                                        <p class="mb-1"><strong>Ventas:</strong> S/ 298,237 <span class="badge bg-danger">-1.1%</span></p>
+                                        <p class="mb-0"><strong>Ganancia:</strong> S/ 224,569 <span class="badge bg-success">+31.8%</span></p>
+                                        <hr class="my-2 bg-white">
+                                        <small><em>Mejor margen de ganancia</em></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-white bg-success">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2025 vs 2024</h6>
+                                        <p class="mb-1"><strong>Ventas:</strong> S/ 336,198 <span class="badge bg-light text-dark">+12.7%</span></p>
+                                        <p class="mb-0"><strong>Ganancia:</strong> S/ 264,482 <span class="badge bg-light text-dark">+17.8%</span></p>
+                                        <hr class="my-2 bg-white">
+                                        <small><em>Crecimiento sostenido</em></small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico de Gastos en Publicidad -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h5 class="mb-0">💰 Histórico de Gastos en Publicidad</h5>
+                                        <small>Inversión mensual por plataforma (2023-2025)</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <img src="/static/historico_gastos_publicidad.png" class="img-fluid" alt="Histórico Gastos Publicidad">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tarjetas de Estadísticas de Publicidad -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="card text-white bg-primary">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2023</h6>
+                                        <p class="mb-1"><strong>Gasto Total:</strong> S/ 1,750</p>
+                                        <p class="mb-0"><strong>META:</strong> 100%</p>
+                                        <small><em>Solo META, sin TIKTOK</em></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-white bg-warning">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2024 vs 2023</h6>
+                                        <p class="mb-1"><strong>Gasto Total:</strong> S/ 14,732 <span class="badge bg-success">+741.8%</span></p>
+                                        <p class="mb-0"><strong>META:</strong> 50.2% | <strong>TIKTOK:</strong> 49.8%</p>
+                                        <hr class="my-2 bg-dark">
+                                        <small><em>Inicio inversión TIKTOK</em></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-white bg-success">
+                                    <div class="card-body">
+                                        <h6 class="card-title">2025 vs 2024</h6>
+                                        <p class="mb-1"><strong>Gasto Total:</strong> S/ 26,994 <span class="badge bg-light text-dark">+83.2%</span></p>
+                                        <p class="mb-0"><strong>META:</strong> 95.2% | <strong>TIKTOK:</strong> 4.8%</p>
+                                        <hr class="my-2 bg-white">
+                                        <small><em>Enfoque en META</em></small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico TOP 10 Productos -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-danger text-white">
+                                        <h5 class="mb-0">🏆 TOP 10 Productos Más Vendidos 2025</h5>
+                                        <small>Por monto de ventas y por cantidad vendida</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <img src="/static/top10_productos_2025.png" class="img-fluid" alt="TOP 10 Productos 2025">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Estadísticas TOP 10 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">💰 Impacto del TOP 10</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row text-center">
+                                            <div class="col-6">
+                                                <h4 class="text-success">46.8%</h4>
+                                                <small class="text-muted">de las ventas totales</small>
+                                            </div>
+                                            <div class="col-6">
+                                                <h4 class="text-success">48.6%</h4>
+                                                <small class="text-muted">de las ganancias totales</small>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <p class="mb-0 text-center"><strong>S/ 157,371</strong> en ventas</p>
+                                        <p class="mb-0 text-center"><strong>S/ 128,561</strong> en ganancias</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">📊 Análisis de Productos</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="mb-2"><strong>🥇 #1 por Ventas:</strong> Pedido Web (S/ 30,305)</p>
+                                        <p class="mb-2"><strong>🥇 #1 por Cantidad:</strong> Correa 22mm (1,201 unidades)</p>
+                                        <hr>
+                                        <p class="mb-0 small text-muted">El TOP 10 representa casi la mitad de todo el negocio, concentrándose principalmente en correas para smartwatch.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico BOTTOM 10 Productos HUESO -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-dark text-white">
+                                        <h5 class="mb-0">⚠️ BOTTOM 10 Productos HUESO (Menor Rotación) 2025</h5>
+                                        <small>Productos con menor desempeño en ventas - Revisar inventario</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <img src="/static/bottom10_productos_2025.png" class="img-fluid" alt="BOTTOM 10 Productos 2025">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Estadísticas BOTTOM 10 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">📉 Impacto del BOTTOM 10</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row text-center">
+                                            <div class="col-6">
+                                                <h4 class="text-danger">0.07%</h4>
+                                                <small class="text-muted">de las ventas totales</small>
+                                            </div>
+                                            <div class="col-6">
+                                                <h4 class="text-danger">0.06%</h4>
+                                                <small class="text-muted">de las ganancias totales</small>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <p class="mb-0 text-center"><strong>S/ 234</strong> en ventas totales</p>
+                                        <p class="mb-0 text-center"><strong>S/ 146</strong> en ganancias (62.5% margen)</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">💡 Recomendaciones</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="mb-0 small">
+                                            <li><strong>LIQUIDAR:</strong> Productos con márgenes bajos y poca rotación</li>
+                                            <li><strong>PROMOCIONAR:</strong> Productos con márgenes altos pero poca rotación</li>
+                                            <li><strong>DESCONTINUAR:</strong> No vendidos en 3+ meses</li>
+                                            <li><strong>REVISAR STOCK:</strong> No sobre-inventariar estos productos</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
                 </div>
             </main>
         </div>
@@ -658,6 +928,16 @@
         const yoyDetailedData = {{ yoy_detailed_chart | safe }};
         {% endif %}
 
+        // Tabla de ventas y ganancias mensuales
+        {% if monthly_sales_table %}
+        const monthlySalesTableData = {{ monthly_sales_table | safe }};
+        {% endif %}
+
+        // Tabla de gastos en publicidad mensuales
+        {% if monthly_ads_table %}
+        const monthlyAdsTableData = {{ monthly_ads_table | safe }};
+        {% endif %}
+
         // Renderizar gráficos principales
         Plotly.newPlot('trendChart', trendData.data, trendData.layout, {responsive: true});
         if (top20Data) Plotly.newPlot('top20Chart', top20Data.data, top20Data.layout, {responsive: true});
@@ -688,6 +968,16 @@
         {% endif %}
         {% if monthly_projection_chart %}
         if (monthlyProjectionData) Plotly.newPlot('monthlyProjectionChart', monthlyProjectionData.data, monthlyProjectionData.layout, {responsive: true});
+        {% endif %}
+
+        // Renderizar tabla de ventas y ganancias mensuales
+        {% if monthly_sales_table %}
+        if (monthlySalesTableData) Plotly.newPlot('monthlySalesTable', monthlySalesTableData.data, monthlySalesTableData.layout, {responsive: true});
+        {% endif %}
+
+        // Renderizar tabla de gastos en publicidad
+        {% if monthly_ads_table %}
+        if (monthlyAdsTableData) Plotly.newPlot('monthlyAdsTable', monthlyAdsTableData.data, monthlyAdsTableData.layout, {responsive: true});
         {% endif %}
 
         // Renderizar gráficos de comparación año a año
@@ -838,6 +1128,36 @@
             if (result.chart) {
                 const chartData = JSON.parse(result.chart);
                 Plotly.react('monthlySpendingChart', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateSalesTable() {
+            const yearSelect = document.getElementById('salesTableYear').value;
+            const url = yearSelect === 'all'
+                ? '/api/monthly_sales_table'
+                : `/api/monthly_sales_table/${yearSelect}`;
+
+            const response = await fetch(url);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('monthlySalesTable', chartData.data, chartData.layout);
+            }
+        }
+
+        async function updateAdsTable() {
+            const yearSelect = document.getElementById('adsTableYear').value;
+            const url = yearSelect === 'all'
+                ? '/api/monthly_ads_table'
+                : `/api/monthly_ads_table/${yearSelect}`;
+
+            const response = await fetch(url);
+            const result = await response.json();
+
+            if (result.chart) {
+                const chartData = JSON.parse(result.chart);
+                Plotly.react('monthlyAdsTable', chartData.data, chartData.layout);
             }
         }
 

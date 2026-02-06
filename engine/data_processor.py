@@ -48,6 +48,7 @@ class DataProcessor:
                 df['Costo Producto'] = df['costo']
                 df['Canal'] = df['plataforma']
                 df['Categoria'] = df.get('categoria', 'Otros')
+                df['Pedido_ID'] = df.get('pedido_id', df.index.astype(str))  # Mapear pedido_id
                 df['Margen'] = df['Precio Venta'] - df['Costo Producto']
                 df['Gasto Ads'] = 0
                 
@@ -1092,6 +1093,7 @@ class DataProcessor:
     def get_ads_comparison_data(self, year, roas_meta=None, roas_tiktok=None):
         """
         Obtiene datos para comparar Venta Real vs Meta y ROAS Real vs Esperado
+        ACTUALIZADO: Usa ventas de ventas_master y ROAS GENERAL
 
         Args:
             year: Año para el análisis
@@ -1099,46 +1101,57 @@ class DataProcessor:
             roas_tiktok: ROAS esperado para TIKTOK (opcional, usa ROAS_TARGETS si no se especifica)
 
         Returns:
-            dict con datos de comparación
+            dict con datos de comparación por plataforma
         """
         if self.df_ads is None or self.df_ads.empty:
             return {}
 
-        # Usar ROAS configurados o valores por defecto
-        roas_targets = {
-            'META': roas_meta if roas_meta is not None else self.ROAS_TARGETS.get('META', 12.0),
-            'TIKTOK': roas_tiktok if roas_tiktok is not None else self.ROAS_TARGETS.get('TIKTOK', 8.0)
-        }
+        # Calcular ROAS REAL general del año (ventas_master / gastos_ads)
+        roas_real_general = self.calculate_real_roas(year)
+        if roas_real_general is None:
+            roas_real_general = 10.0  # Fallback conservador
 
-        # Obtener datos reales del año
+        # Obtener datos de gastos por plataforma
         df_year = self.df_ads[self.df_ads['anio'] == year]
 
-        # Calcular metas basadas en años anteriores
-        goals = self.calculate_ads_goals(year, growth_pct=10)
+        # Obtener ventas totales del año desde ventas_master
+        if self.df is not None and not self.df.empty:
+            df_sales_year = self.df[self.df['Fecha'].dt.year == year]
+            ventas_totales_year = df_sales_year['Precio Venta'].sum()
+        else:
+            ventas_totales_year = 0
 
         comparison = {}
 
         for platform in df_year['plataforma'].unique():
             df_platform = df_year[df_year['plataforma'] == platform]
-
-            venta_real = df_platform['venta_soles'].sum()
             gasto_real = df_platform['gasto_soles'].sum()
-            roas_real = (venta_real / gasto_real) if gasto_real > 0 else 0
 
-            # Obtener metas
-            goal_data = goals.get(platform, {})
-            meta_venta = goal_data.get('meta_venta_anual', venta_real)
-            roas_esperado = roas_targets.get(platform, 10)
+            # Calcular ventas proporcionales al gasto de cada plataforma
+            # (distribución proporcional porque no sabemos la atribución exacta)
+            gasto_total = df_year['gasto_soles'].sum()
+            proporcion_gasto = gasto_real / gasto_total if gasto_total > 0 else 0
+            venta_estimada = ventas_totales_year * proporcion_gasto
+
+            # Meta de venta = Gasto × ROAS esperado
+            roas_esperado = roas_meta if platform == 'META' and roas_meta else \
+                           (roas_tiktok if platform == 'TIKTOK' and roas_tiktok else \
+                            self.ROAS_TARGETS.get(platform, 10))
+
+            meta_venta = gasto_real * roas_esperado
+
+            # El ROAS real es el general (no por plataforma)
+            roas_real = roas_real_general
 
             # Calcular cumplimiento
-            cumplimiento_venta = (venta_real / meta_venta * 100) if meta_venta > 0 else 0
+            cumplimiento_venta = (venta_estimada / meta_venta * 100) if meta_venta > 0 else 0
             cumplimiento_roas = (roas_real / roas_esperado * 100) if roas_esperado > 0 else 0
 
             comparison[platform] = {
-                'venta_real': float(venta_real),
+                'venta_real': float(venta_estimada),
                 'meta_venta': float(meta_venta),
                 'cumplimiento_venta_pct': float(cumplimiento_venta),
-                'roas_real': float(roas_real),
+                'roas_real': float(roas_real),  # ROAS general
                 'roas_esperado': float(roas_esperado),
                 'cumplimiento_roas_pct': float(cumplimiento_roas),
                 'gasto_real': float(gasto_real)
@@ -1247,8 +1260,243 @@ class DataProcessor:
 
         return fig.to_json()
 
+    def calculate_real_roas(self, year):
+        """
+        Calcula el ROAS real usando ventas de ventas_master y gastos de ads_costs
+
+        Args:
+            year: Año para calcular el ROAS
+
+        Returns:
+            float: ROAS calculado (ventas_master / gastos_ads_costs) o None si no hay datos
+        """
+        try:
+            # Obtener ventas totales del año desde ventas_master
+            if self.df is None or self.df.empty:
+                return None
+
+            df_year = self.df[self.df['Fecha'].dt.year == year]
+            ventas_totales = df_year['Precio Venta'].sum()
+
+            # Obtener gastos totales del año desde ads_costs
+            if self.df_ads is None or self.df_ads.empty:
+                return None
+
+            df_ads_year = self.df_ads[self.df_ads['anio'] == year]
+            gastos_totales = df_ads_year['gasto_soles'].sum()
+
+            if gastos_totales > 0:
+                roas = ventas_totales / gastos_totales
+                return float(roas)
+            else:
+                return None
+
+        except Exception as e:
+            print(f"Error calculando ROAS real para {year}: {e}")
+            return None
+
+    def get_2026_projections_from_budget(self):
+        """
+        Carga presupuesto 2026 y calcula ventas proyectadas basadas en ROAS GENERAL de 2025
+        ROAS General = Ventas totales (ventas_master) / Gastos totales en publicidad (ads_costs)
+
+        Returns:
+            dict con proyecciones por plataforma
+        """
+        import os
+        budget_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'budget_2026.csv')
+
+        if not os.path.exists(budget_file):
+            return {}
+
+        try:
+            # Cargar presupuesto 2026
+            budget_df = pd.read_csv(budget_file)
+
+            # Calcular totales anuales por plataforma (solo META y TIKTOK)
+            total_meta = budget_df['meta'].sum()
+            total_tiktok = budget_df['tiktok'].sum()
+            total_presupuesto = total_meta + total_tiktok
+
+            # Calcular ROAS GENERAL de 2025 (ventas_master / ads_costs)
+            roas_general_2025 = self.calculate_real_roas(2025)
+
+            if roas_general_2025 is None or roas_general_2025 < 1.0:
+                # Si no hay datos o el ROAS es muy bajo, usar un valor conservador
+                roas_general_2025 = 6.0
+                print(f"[ADVERTENCIA] Usando ROAS conservador de {roas_general_2025}x para proyección 2026")
+            else:
+                print(f"[INFO] ROAS General 2025: {roas_general_2025:.2f}x")
+
+            # Calcular ventas proyectadas totales = Presupuesto total × ROAS general
+            ventas_proyectadas_totales = total_presupuesto * roas_general_2025
+
+            # Distribuir ventas proporcionalmente al gasto de cada plataforma
+            proporcion_meta = total_meta / total_presupuesto if total_presupuesto > 0 else 0.5
+            proporcion_tiktok = total_tiktok / total_presupuesto if total_presupuesto > 0 else 0.5
+
+            ventas_proyectadas_meta = ventas_proyectadas_totales * proporcion_meta
+            ventas_proyectadas_tiktok = ventas_proyectadas_totales * proporcion_tiktok
+
+            # Calcular ventas proyectadas = Gasto × ROAS (solo META y TIKTOK)
+            projections = {
+                'META': {
+                    'gasto_proyectado': float(total_meta),
+                    'venta_proyectada': float(ventas_proyectadas_meta),
+                    'roas_esperado': float(roas_general_2025)
+                },
+                'TIKTOK': {
+                    'gasto_proyectado': float(total_tiktok),
+                    'venta_proyectada': float(ventas_proyectadas_tiktok),
+                    'roas_esperado': float(roas_general_2025)
+                }
+            }
+
+            return projections
+
+        except Exception as e:
+            print(f"Error cargando presupuesto 2026: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
     def create_sales_goal_comparison_chart(self, year=2025):
         """Crea gráfico comparativo de Venta Real vs Meta con ROAS"""
+        # Si es 2026, usar proyecciones basadas en presupuesto
+        if year == 2026:
+            projections = self.get_2026_projections_from_budget()
+            if not projections:
+                return None
+
+            platforms = list(projections.keys())
+            gasto_proyectado = [projections[p]['gasto_proyectado'] for p in platforms]
+            venta_proyectada = [projections[p]['venta_proyectada'] for p in platforms]
+            roas_esperado = [projections[p]['roas_esperado'] for p in platforms]
+
+            # Obtener ventas reales de 2026 si existen
+            venta_real = []
+            roas_real = []
+            if self.df_ads is not None and not self.df_ads.empty:
+                df_2026 = self.df_ads[self.df_ads['anio'] == 2026]
+                for platform in platforms:
+                    df_platform = df_2026[df_2026['plataforma'] == platform]
+                    if not df_platform.empty:
+                        vr = df_platform['venta_soles'].sum()
+                        gr = df_platform['gasto_soles'].sum()
+                        venta_real.append(vr)
+                        roas_real.append(vr / gr if gr > 0 else 0)
+                    else:
+                        venta_real.append(0)
+                        roas_real.append(0)
+            else:
+                venta_real = [0] * len(platforms)
+                roas_real = [0] * len(platforms)
+
+            # Crear gráfico
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+            # Barras de ventas proyectadas (verde) - SIEMPRE mostrar para 2026
+            fig.add_trace(
+                go.Bar(
+                    name='Venta Proyectada',
+                    x=platforms,
+                    y=venta_proyectada,
+                    marker_color='#2ecc71',
+                    text=[f"S/ {v:,.0f}" for v in venta_proyectada],
+                    textposition='outside',
+                    hovertemplate='<b>%{x}</b><br>Venta Proyectada: S/ %{y:,.0f}<extra></extra>',
+                    yaxis='y'
+                ),
+                secondary_y=False
+            )
+
+            # Barras de meta de venta (roja) - 15% más que la proyección
+            meta_venta = [v * 1.15 for v in venta_proyectada]
+            fig.add_trace(
+                go.Bar(
+                    name='Meta de Venta (+15%)',
+                    x=platforms,
+                    y=meta_venta,
+                    marker_color='#e74c3c',
+                    text=[f"S/ {v:,.0f}" for v in meta_venta],
+                    textposition='outside',
+                    hovertemplate='<b>%{x}</b><br>Meta (+15%): S/ %{y:,.0f}<extra></extra>',
+                    yaxis='y'
+                ),
+                secondary_y=False
+            )
+
+            # Barras de ventas reales (si existen datos reales de 2026)
+            if sum(venta_real) > 0:
+                fig.add_trace(
+                    go.Bar(
+                        name='Venta Real',
+                        x=platforms,
+                        y=venta_real,
+                        marker_color='#2ecc71',
+                        text=[f"S/ {v:,.0f}" if v > 0 else "" for v in venta_real],
+                        textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>Venta Real: S/ %{y:,.0f}<extra></extra>',
+                        yaxis='y'
+                    ),
+                    secondary_y=False
+                )
+
+            # Línea de ROAS esperado
+            fig.add_trace(
+                go.Scatter(
+                    name='ROAS Esperado (basado en 2025)',
+                    x=platforms,
+                    y=roas_esperado,
+                    mode='lines+markers+text',
+                    marker=dict(size=10, color='#95a5a6'),
+                    line=dict(width=2, color='#95a5a6', dash='dash'),
+                    text=[f"{r:.1f}x" for r in roas_esperado],
+                    textposition='top center',
+                    hovertemplate='<b>%{x}</b><br>ROAS Esperado: %{y:.2f}x<extra></extra>',
+                    yaxis='y2'
+                ),
+                secondary_y=True
+            )
+
+            # ROAS real si hay datos
+            if sum(roas_real) > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        name='ROAS Real',
+                        x=platforms,
+                        y=roas_real,
+                        mode='lines+markers+text',
+                        marker=dict(size=12, color='#3498db'),
+                        line=dict(width=3, color='#3498db'),
+                        text=[f"{r:.1f}x" if r > 0 else "" for r in roas_real],
+                        textposition='bottom center',
+                        hovertemplate='<b>%{x}</b><br>ROAS Real: %{y:.2f}x<extra></extra>',
+                        yaxis='y2'
+                    ),
+                    secondary_y=True
+                )
+
+            # Actualizar layout
+            fig.update_xaxes(title_text="Plataforma")
+            fig.update_yaxes(title_text="Ventas (S/)", tickformat=',.0f', secondary_y=False)
+            fig.update_yaxes(title_text="ROAS", tickformat='.1f', secondary_y=True)
+
+            total_gasto = sum(gasto_proyectado)
+            total_venta_proj = sum(venta_proyectada)
+
+            fig.update_layout(
+                title=f'Proyección 2026 basada en Presupuesto<br><sub>Inversión total: S/ {total_gasto:,.0f} | Ventas proyectadas: S/ {total_venta_proj:,.0f}</sub>',
+                template='plotly_white',
+                barmode='group',
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hovermode='x unified'
+            )
+
+            return fig.to_json()
+
+        # Para años anteriores, usar la lógica original
         comparison = self.get_ads_comparison_data(year)
 
         if not comparison:
@@ -1677,6 +1925,279 @@ class DataProcessor:
         )
 
         return fig.to_json()
+
+    def create_monthly_sales_table(self, year=None):
+        """
+        Crea tabla interactiva con datos históricos de ventas y ganancias por mes
+
+        Args:
+            year: Año específico o None para todos los años
+
+        Returns:
+            JSON del gráfico (tabla) o None
+        """
+        if self.df is None or self.df.empty:
+            return None
+
+        try:
+            df_copy = self.df.copy()
+
+            # Filtrar por año si se especifica
+            if year is not None:
+                df_copy = df_copy[df_copy['Fecha'].dt.year == year]
+
+            if df_copy.empty:
+                return None
+
+            # Crear columnas de año-mes para agrupación
+            df_copy['Año'] = df_copy['Fecha'].dt.year
+            df_copy['Mes'] = df_copy['Fecha'].dt.month
+            df_copy['Mes_Nombre'] = df_copy['Fecha'].dt.strftime('%B')
+
+            # Mapeo de nombres de meses en español
+            meses_es = {
+                'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+            }
+            df_copy['Mes_Nombre'] = df_copy['Mes_Nombre'].map(meses_es)
+
+            # Agrupar por año y mes
+            monthly_data = df_copy.groupby(['Año', 'Mes', 'Mes_Nombre']).agg({
+                'Precio Venta': 'sum',
+                'Costo Producto': 'sum',
+                'Margen': 'sum',
+                'Pedido_ID': 'nunique'  # Contar pedidos únicos, no items
+            }).reset_index()
+
+            monthly_data.columns = ['Año', 'Mes_Num', 'Mes', 'Ventas', 'Costos', 'Ganancia', 'Transacciones']
+
+            # Ordenar por año y mes
+            monthly_data = monthly_data.sort_values(['Año', 'Mes_Num'])
+
+            # Calcular margen porcentual
+            monthly_data['Margen_%'] = (monthly_data['Ganancia'] / monthly_data['Ventas'] * 100).round(1)
+
+            # Crear columna de período
+            monthly_data['Período'] = monthly_data['Mes'] + ' ' + monthly_data['Año'].astype(str)
+
+            # Crear tabla con Plotly
+            fig = go.Figure(data=[go.Table(
+                header=dict(
+                    values=['<b>Período</b>', '<b>Ventas (S/)</b>', '<b>Costos (S/)</b>',
+                            '<b>Ganancia (S/)</b>', '<b>Margen %</b>', '<b>Transacciones</b>'],
+                    fill_color='#2c3e50',
+                    align='center',
+                    font=dict(color='white', size=12, family='Arial'),
+                    height=40
+                ),
+                cells=dict(
+                    values=[
+                        monthly_data['Período'],
+                        [f"S/ {v:,.2f}" for v in monthly_data['Ventas']],
+                        [f"S/ {v:,.2f}" for v in monthly_data['Costos']],
+                        [f"S/ {v:,.2f}" for v in monthly_data['Ganancia']],
+                        [f"{v:.1f}%" for v in monthly_data['Margen_%']],
+                        monthly_data['Transacciones']
+                    ],
+                    fill_color=[['#ecf0f1' if i % 2 == 0 else 'white' for i in range(len(monthly_data))]],
+                    align=['left', 'right', 'right', 'right', 'center', 'center'],
+                    font=dict(color='#2c3e50', size=11, family='Arial'),
+                    height=35
+                )
+            )])
+
+            # Resumen al final
+            total_ventas = monthly_data['Ventas'].sum()
+            total_costos = monthly_data['Costos'].sum()
+            total_ganancia = monthly_data['Ganancia'].sum()
+            total_transacciones = monthly_data['Transacciones'].sum()
+            margen_promedio = (total_ganancia / total_ventas * 100) if total_ventas > 0 else 0
+
+            title_text = f'Historial de Ventas y Ganancias Mensuales'
+            if year is not None:
+                title_text += f' - {year}'
+
+            title_text += (
+                f'<br><sub>Total: S/ {total_ventas:,.2f} en ventas | '
+                f'S/ {total_ganancia:,.2f} en ganancias | '
+                f'{total_transacciones:,} transacciones | '
+                f'Margen promedio: {margen_promedio:.1f}%</sub>'
+            )
+
+            fig.update_layout(
+                title=title_text,
+                template='plotly_white',
+                height=600,
+                margin=dict(l=20, r=20, t=100, b=20)
+            )
+
+            return fig.to_json()
+
+        except Exception as e:
+            print(f"Error en create_monthly_sales_table: {e}")
+            return None
+
+    def create_monthly_ads_table(self, year=None):
+        """
+        Crea tabla interactiva con gastos en publicidad (META y TIKTOK) por mes
+
+        Args:
+            year: Año específico o None para todos los años
+
+        Returns:
+            JSON del gráfico (tabla) o None
+        """
+        if self.df_ads is None or self.df_ads.empty:
+            return None
+
+        try:
+            df_copy = self.df_ads.copy()
+
+            # Filtrar por año si se especifica
+            if year is not None:
+                df_copy = df_copy[df_copy['anio'] == year]
+
+            if df_copy.empty:
+                return None
+
+            # Mapeo de nombres de meses en español
+            meses_orden = {
+                'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+                'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+                'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+            }
+            df_copy['mes_num'] = df_copy['mes_nombre'].map(meses_orden)
+
+            # Agrupar por año, mes y plataforma
+            monthly_data = df_copy.groupby(['anio', 'mes_nombre', 'mes_num', 'plataforma']).agg({
+                'gasto_soles': 'sum',
+                'venta_soles': 'sum'
+            }).reset_index()
+
+            # Calcular ROAS
+            monthly_data['roas'] = monthly_data.apply(
+                lambda row: row['venta_soles'] / row['gasto_soles'] if row['gasto_soles'] > 0 else 0,
+                axis=1
+            )
+
+            # Pivotar para tener META y TIKTOK en columnas separadas
+            pivot_gasto_meta = monthly_data[monthly_data['plataforma'] == 'META'].set_index(['anio', 'mes_num', 'mes_nombre'])['gasto_soles']
+            pivot_gasto_tiktok = monthly_data[monthly_data['plataforma'] == 'TIKTOK'].set_index(['anio', 'mes_num', 'mes_nombre'])['gasto_soles']
+            pivot_venta_meta = monthly_data[monthly_data['plataforma'] == 'META'].set_index(['anio', 'mes_num', 'mes_nombre'])['venta_soles']
+            pivot_venta_tiktok = monthly_data[monthly_data['plataforma'] == 'TIKTOK'].set_index(['anio', 'mes_num', 'mes_nombre'])['venta_soles']
+            pivot_roas_meta = monthly_data[monthly_data['plataforma'] == 'META'].set_index(['anio', 'mes_num', 'mes_nombre'])['roas']
+            pivot_roas_tiktok = monthly_data[monthly_data['plataforma'] == 'TIKTOK'].set_index(['anio', 'mes_num', 'mes_nombre'])['roas']
+
+            # Crear DataFrame consolidado
+            all_periods = monthly_data[['anio', 'mes_num', 'mes_nombre']].drop_duplicates().sort_values(['anio', 'mes_num'])
+
+            table_data = []
+            for _, row in all_periods.iterrows():
+                year_val = row['anio']
+                mes_num = row['mes_num']
+                mes_nombre = row['mes_nombre']
+                idx = (year_val, mes_num, mes_nombre)
+
+                gasto_meta = pivot_gasto_meta.get(idx, 0)
+                gasto_tiktok = pivot_gasto_tiktok.get(idx, 0)
+                venta_meta = pivot_venta_meta.get(idx, 0)
+                venta_tiktok = pivot_venta_tiktok.get(idx, 0)
+                roas_meta = pivot_roas_meta.get(idx, 0)
+                roas_tiktok = pivot_roas_tiktok.get(idx, 0)
+
+                total_gasto = gasto_meta + gasto_tiktok
+                total_venta = venta_meta + venta_tiktok
+                roas_promedio = total_venta / total_gasto if total_gasto > 0 else 0
+
+                table_data.append({
+                    'Periodo': f"{mes_nombre.capitalize()} {year_val}",
+                    'Año': year_val,
+                    'Gasto_META': gasto_meta,
+                    'Gasto_TIKTOK': gasto_tiktok,
+                    'Gasto_Total': total_gasto,
+                    'Venta_META': venta_meta,
+                    'Venta_TIKTOK': venta_tiktok,
+                    'Venta_Total': total_venta,
+                    'ROAS_META': roas_meta,
+                    'ROAS_TIKTOK': roas_tiktok,
+                    'ROAS_Promedio': roas_promedio
+                })
+
+            result_df = pd.DataFrame(table_data)
+
+            # Crear tabla con Plotly
+            fig = go.Figure(data=[go.Table(
+                header=dict(
+                    values=['<b>Período</b>', '<b>Gasto META</b>', '<b>Gasto TIKTOK</b>', '<b>Total Gasto</b>',
+                            '<b>Venta META</b>', '<b>Venta TIKTOK</b>', '<b>Total Venta</b>',
+                            '<b>ROAS META</b>', '<b>ROAS TIKTOK</b>', '<b>ROAS Prom.</b>'],
+                    fill_color='#2c3e50',
+                    align='center',
+                    font=dict(color='white', size=11, family='Arial'),
+                    height=40
+                ),
+                cells=dict(
+                    values=[
+                        result_df['Periodo'],
+                        [f"S/ {v:,.2f}" for v in result_df['Gasto_META']],
+                        [f"S/ {v:,.2f}" for v in result_df['Gasto_TIKTOK']],
+                        [f"S/ {v:,.2f}" for v in result_df['Gasto_Total']],
+                        [f"S/ {v:,.2f}" for v in result_df['Venta_META']],
+                        [f"S/ {v:,.2f}" for v in result_df['Venta_TIKTOK']],
+                        [f"S/ {v:,.2f}" for v in result_df['Venta_Total']],
+                        [f"{v:.2f}x" for v in result_df['ROAS_META']],
+                        [f"{v:.2f}x" for v in result_df['ROAS_TIKTOK']],
+                        [f"{v:.2f}x" for v in result_df['ROAS_Promedio']]
+                    ],
+                    fill_color=[['#ecf0f1' if i % 2 == 0 else 'white' for i in range(len(result_df))]],
+                    align=['left', 'right', 'right', 'right', 'right', 'right', 'right', 'center', 'center', 'center'],
+                    font=dict(color='#2c3e50', size=10, family='Arial'),
+                    height=35
+                )
+            )])
+
+            # Calcular totales por año
+            if year is None:
+                # Agrupar por año para el resumen
+                yearly_summary = result_df.groupby('Año').agg({
+                    'Gasto_META': 'sum',
+                    'Gasto_TIKTOK': 'sum',
+                    'Gasto_Total': 'sum',
+                    'Venta_META': 'sum',
+                    'Venta_TIKTOK': 'sum',
+                    'Venta_Total': 'sum'
+                })
+                yearly_summary['ROAS_Promedio'] = yearly_summary['Venta_Total'] / yearly_summary['Gasto_Total']
+
+                summary_text = ' | '.join([
+                    f"{int(year_val)}: S/ {row['Gasto_Total']:,.0f} gastados, S/ {row['Venta_Total']:,.0f} ventas, ROAS {row['ROAS_Promedio']:.2f}x"
+                    for year_val, row in yearly_summary.iterrows()
+                ])
+            else:
+                total_gasto = result_df['Gasto_Total'].sum()
+                total_venta = result_df['Venta_Total'].sum()
+                roas_year = total_venta / total_gasto if total_gasto > 0 else 0
+                summary_text = f"Total {year}: S/ {total_gasto:,.0f} gastados | S/ {total_venta:,.0f} ventas | ROAS: {roas_year:.2f}x"
+
+            title_text = f'Gastos en Publicidad Mensuales (META y TIKTOK)'
+            if year is not None:
+                title_text += f' - {year}'
+            title_text += f'<br><sub>{summary_text}</sub>'
+
+            fig.update_layout(
+                title=title_text,
+                template='plotly_white',
+                height=600,
+                margin=dict(l=20, r=20, t=120, b=20)
+            )
+
+            return fig.to_json()
+
+        except Exception as e:
+            print(f"Error en create_monthly_ads_table: {e}")
+            return None
 
     def create_monthly_ads_spending(self, year=2025):
         """

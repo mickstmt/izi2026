@@ -88,6 +88,14 @@ def index():
         yoy_comparison_chart = processor.create_year_over_year_comparison()
         yoy_detailed_chart = processor.create_yoy_detailed_comparison()
 
+        # Tabla de ventas y ganancias mensuales
+        monthly_sales_table = processor.create_monthly_sales_table(year=None)  # Todos los años
+
+        # Tabla de gastos en publicidad mensuales
+        monthly_ads_table = None
+        if processor.df_ads is not None and not processor.df_ads.empty:
+            monthly_ads_table = processor.create_monthly_ads_table(year=None)  # Todos los años
+
         summary = {
             'total_sales': proj_df['Ventas'].sum(),
             'total_profit': proj_df['Utilidad Neta'].sum(),
@@ -120,7 +128,10 @@ def index():
                                monthly_projection_chart=monthly_projection_chart,
                                # Comparación año a año
                                yoy_comparison_chart=yoy_comparison_chart,
-                               yoy_detailed_chart=yoy_detailed_chart)
+                               yoy_detailed_chart=yoy_detailed_chart,
+                               # Tablas mensuales
+                               monthly_sales_table=monthly_sales_table,
+                               monthly_ads_table=monthly_ads_table)
     except Exception as e:
         return f"<h1>Error en la Aplicación</h1><p>{str(e)}</p><p>Por favor revisa que las columnas del Excel sean correctas.</p>"
 
@@ -192,6 +203,20 @@ def api_monthly_roas(year):
 def api_monthly_spending(year):
     """Retorna gráfico Inversión en Publicidad Mes a Mes para el año especificado"""
     chart = processor.create_monthly_ads_spending(year=year)
+    return jsonify({'chart': chart})
+
+@app.route('/api/monthly_sales_table', methods=['GET'])
+@app.route('/api/monthly_sales_table/<int:year>', methods=['GET'])
+def api_monthly_sales_table(year=None):
+    """Retorna tabla de ventas y ganancias mensuales"""
+    chart = processor.create_monthly_sales_table(year=year)
+    return jsonify({'chart': chart})
+
+@app.route('/api/monthly_ads_table', methods=['GET'])
+@app.route('/api/monthly_ads_table/<int:year>', methods=['GET'])
+def api_monthly_ads_table(year=None):
+    """Retorna tabla de gastos en publicidad mensuales (META y TIKTOK)"""
+    chart = processor.create_monthly_ads_table(year=year)
     return jsonify({'chart': chart})
 
 @app.route('/api/historical_budgets/<int:year>', methods=['GET'])
